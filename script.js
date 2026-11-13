@@ -49,18 +49,58 @@ document.addEventListener('DOMContentLoaded', () => {
     revealEls.forEach(el => el.classList.add('is-visible'));
   }
 
-  /* ---------- forms: build a mailto so submissions land in the inbox ---------- */
+  /* ---------- forms: post to Formspree so every lead is logged ---------- */
+  // Paste the Formspree form URL here (https://formspree.io/f/xxxxxxxx).
+  // While it's blank, forms fall back to opening the visitor's email app.
+  const FORM_ENDPOINT = '';
   const DEST_EMAIL = 'Xtreme.windows77@gmail.com';
 
   document.querySelectorAll('form[data-mailto]').forEach(form => {
-    form.addEventListener('submit', (e) => {
+    const status = form.querySelector('.form-status');
+    const note = form.querySelector('.form-note');
+    const submitBtn = form.querySelector('button[type="submit"]');
+
+    if (FORM_ENDPOINT && note) {
+      note.textContent = "We'll follow up by email or phone, usually within one business day. Prefer to talk? Call 780-203-6289.";
+    }
+
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
+
+      if (FORM_ENDPOINT) {
+        const originalLabel = submitBtn.textContent;
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Sending…';
+        status.textContent = '';
+
+        try {
+          const body = new FormData(form);
+          body.append('_subject', form.dataset.subject || 'Website enquiry');
+          body.append('Source page', location.pathname.split('/').pop() || 'index.html');
+
+          const res = await fetch(FORM_ENDPOINT, {
+            method: 'POST',
+            body,
+            headers: { Accept: 'application/json' }
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+          form.reset();
+          status.textContent = "Thanks! Your request was sent. We'll be in touch soon.";
+        } catch (err) {
+          status.textContent = 'Sorry, that did not send. Please call 780-203-6289 or email ' + DEST_EMAIL + '.';
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalLabel;
+        }
+        return;
+      }
 
       const data = new FormData(form);
       const subject = form.dataset.subject || 'Website enquiry';
       const lines = [];
 
-      form.querySelectorAll('[name]').forEach(field => {
+      form.querySelectorAll('[name]:not([name="_gotcha"])').forEach(field => {
         const label = field.closest('.field')?.querySelector('label')?.textContent?.trim() || field.name;
         const value = data.get(field.name);
         if (value) lines.push(`${label}: ${value}`);
@@ -69,10 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const body = lines.join('\n');
       const mailto = `mailto:${DEST_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
-      const status = form.querySelector('.form-status');
-      if (status) {
-        status.textContent = 'Opening your email app with these details filled in…';
-      }
+      status.textContent = 'Opening your email app with these details filled in…';
 
       window.location.href = mailto;
     });
